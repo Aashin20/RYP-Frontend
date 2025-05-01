@@ -11,9 +11,17 @@ import { useToast } from "@/hooks/use-toast"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
+interface Event {
+  _id: string;
+  event_name: string;
+  event_sdate: string;
+  event_stime: string;
+  attendees_count: number;
+}
+
 export default function AdminDashboard() {
-  const [activeEvents, setActiveEvents] = useState<any[]>([])
-  const [pastEvents, setPastEvents] = useState<any[]>([])
+  const [activeEvents, setActiveEvents] = useState<Event[]>([])
+  const [pastEvents, setPastEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
   const [faceCount, setFaceCount] = useState(0)
   const router = useRouter()
@@ -26,15 +34,24 @@ export default function AdminDashboard() {
       return
     }
 
-    // Fetch active and past events from backend
     Promise.all([
       fetch(`${API_BASE_URL}/active_events`).then((res) => res.json()),
       fetch(`${API_BASE_URL}/past_events`).then((res) => res.json()),
     ])
       .then(([activeData, pastData]) => {
-        setActiveEvents(activeData.events || [])
-        setPastEvents(pastData.events || [])
-        setFaceCount(5) // Or fetch from API if available
+        const formattedActiveEvents = (activeData.events || []).map((event: Event) => ({
+          ...event,
+          _id: event._id?.toString() || event._id
+        }))
+
+        const formattedPastEvents = (pastData.events || []).map((event: Event) => ({
+          ...event,
+          _id: event._id?.toString() || event._id
+        }))
+
+        setActiveEvents(formattedActiveEvents)
+        setPastEvents(formattedPastEvents)
+        setFaceCount(5)
         setLoading(false)
       })
       .catch((error) => {
@@ -55,13 +72,41 @@ export default function AdminDashboard() {
     })
   }
 
-  // For Cards: Use live events
   const totalEvents = activeEvents.length + pastEvents.length
   const totalAttendees = activeEvents.concat(pastEvents).reduce((sum, event) => sum + (event.attendees_count || 0), 0)
 
+  const renderEventRow = (event: Event) => (
+    <div key={event._id} className="p-4 border-t grid grid-cols-12 gap-4 items-center">
+      <div className="col-span-5 md:col-span-4 font-medium">{event.event_name}</div>
+      <div className="col-span-4 md:col-span-3 text-sm text-muted-foreground hidden md:block">
+        {event.event_sdate} • {event.event_stime.slice(0,5)}
+      </div>
+      <div className="col-span-3 md:col-span-2">
+        <div className="flex items-center">
+          <Users className="h-4 w-4 mr-1 text-muted-foreground" />
+          <span>{event.attendees_count}</span>
+        </div>
+      </div>
+      <div className="col-span-4 md:col-span-3 flex justify-end gap-2">
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={() => handleDownloadAttendance(event._id)}
+        >
+          <Download className="h-4 w-4" />
+          <span className="sr-only md:not-sr-only md:ml-2">Download</span>
+        </Button>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={`/admin/events/${encodeURIComponent(event._id)}`}>
+            View
+          </Link>
+        </Button>
+      </div>
+    </div>
+  )
+
   return (
     <div className="container py-8 px-4">
-      {/* HEADER and BUTTONS here */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold">Admin Dashboard</h1>
@@ -81,7 +126,6 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* EVENT SUMMARY CARDS */}
       <div className="grid gap-6 mb-8 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
@@ -131,7 +175,6 @@ export default function AdminDashboard() {
         </Card>
       </div>
 
-      {/* QUICK ACTION CARDS */}
       <div className="grid gap-6 mb-8 md:grid-cols-2">
         <Card>
           <CardHeader>
@@ -154,7 +197,6 @@ export default function AdminDashboard() {
         </Card>
       </div>
 
-      {/* EVENT TABLES */}
       <Tabs defaultValue="active" className="w-full">
         <TabsList className="mb-4">
           <TabsTrigger value="active">Active Events</TabsTrigger>
@@ -176,29 +218,7 @@ export default function AdminDashboard() {
             ) : activeEvents.length === 0 ? (
               <div className="p-4 text-center text-muted-foreground">No active events found</div>
             ) : (
-              activeEvents.map((event) => (
-                <div key={event._id || event.event_name} className="p-4 border-t grid grid-cols-12 gap-4 items-center">
-                  <div className="col-span-5 md:col-span-4 font-medium">{event.event_name}</div>
-                  <div className="col-span-4 md:col-span-3 text-sm text-muted-foreground hidden md:block">
-                    {event.event_sdate} • {event.event_stime.slice(0,5)}
-                  </div>
-                  <div className="col-span-3 md:col-span-2">
-                    <div className="flex items-center">
-                      <Users className="h-4 w-4 mr-1 text-muted-foreground" />
-                      <span>{event.attendees_count}</span>
-                    </div>
-                  </div>
-                  <div className="col-span-4 md:col-span-3 flex justify-end gap-2">
-                    <Button variant="outline" size="sm" onClick={() => handleDownloadAttendance(event._id)}>
-                      <Download className="h-4 w-4" />
-                      <span className="sr-only md:not-sr-only md:ml-2">Download</span>
-                    </Button>
-                    <Button variant="outline" size="sm" asChild>
-                      <Link href={`/admin/events/${event._id}`}>View</Link>
-                    </Button>
-                  </div>
-                </div>
-              ))
+              activeEvents.map(event => renderEventRow(event))
             )}
           </div>
         </TabsContent>
@@ -218,29 +238,7 @@ export default function AdminDashboard() {
             ) : pastEvents.length === 0 ? (
               <div className="p-4 text-center text-muted-foreground">No past events found</div>
             ) : (
-              pastEvents.map((event) => (
-                <div key={event._id || event.event_name} className="p-4 border-t grid grid-cols-12 gap-4 items-center">
-                  <div className="col-span-5 md:col-span-4 font-medium">{event.event_name}</div>
-                  <div className="col-span-4 md:col-span-3 text-sm text-muted-foreground hidden md:block">
-                    {event.event_sdate} • {event.event_stime.slice(0,5)}
-                  </div>
-                  <div className="col-span-3 md:col-span-2">
-                    <div className="flex items-center">
-                      <Users className="h-4 w-4 mr-1 text-muted-foreground" />
-                      <span>{event.attendees_count}</span>
-                    </div>
-                  </div>
-                  <div className="col-span-4 md:col-span-3 flex justify-end gap-2">
-                    <Button variant="outline" size="sm" onClick={() => handleDownloadAttendance(event._id)}>
-                      <Download className="h-4 w-4" />
-                      <span className="sr-only md:not-sr-only md:ml-2">Download</span>
-                    </Button>
-                    <Button variant="outline" size="sm" asChild>
-                      <Link href={`/admin/events/${event._id}`}>View</Link>
-                    </Button>
-                  </div>
-                </div>
-              ))
+              pastEvents.map(event => renderEventRow(event))
             )}
           </div>
         </TabsContent>
