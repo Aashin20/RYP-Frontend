@@ -215,7 +215,6 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
     
     setSubmitting(true)
     try {
-      console.log("Converting selfie to blob...")
       const selfieBlob = await base64ToBlob(selfieData)
       
       if (!selfieBlob) {
@@ -228,69 +227,72 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
         return
       }
       
-      // Get event ID and sanitize it
       const eventId = params.eventId.trim()
-      console.log("Event ID:", eventId)
-      
-      console.log("Selfie blob size:", selfieBlob.size, "bytes")
-      console.log("Submitting attendance for event:", eventId)
-      console.log("Location:", location)
       
       const formData = new FormData()
-      // Use the exact field name expected by the server
-      formData.append("event_id", params.eventId)  
+      formData.append("event_id", eventId)
       formData.append("user_lat", String(location.lat))
       formData.append("user_lng", String(location.lng))
       formData.append("selfie", selfieBlob, "selfie.jpg")
       
-      // Log form data entries for debugging
-      console.log("Form data entries:")
-      for (const [key, value] of formData.entries()) {
-        console.log(`- ${key}:`, 
-          value instanceof Blob ? `Blob (${value.size} bytes)` : value)
-      }
-      
-      // Use the API_BASE_URL with fallback
       const endpoint = `${API_BASE_URL}/register_attendance`
-      console.log("Submitting to endpoint:", endpoint)
       
       const response = await fetch(endpoint, {
         method: "POST",
         body: formData,
       })
       
-      console.log("Response status:", response.status)
-      
       if (!response.ok) {
         const errorText = await response.text()
         let errorMessage = "Unknown error"
         
         try {
-          // Try to parse as JSON to get detailed error
           const errorData = JSON.parse(errorText)
           errorMessage = errorData.detail || "Server error"
         } catch (e) {
-          // If not JSON, use text as is
           errorMessage = errorText || "Server error"
         }
         
+        // Handle specific error cases
         if (response.status === 404) {
           errorMessage = "Event not found. Please check the event ID and try again."
+        } else if (response.status === 401) {
+          // Redirect to confirmation page with error
+          router.push(`/events/${eventId}/confirmation?` + new URLSearchParams({
+            status: 'error',
+            message: errorMessage,
+            eventId: eventId // Pass eventId for "Try Again" functionality
+          }))
+          return
         }
         
-        console.error("Error response:", errorMessage)
         throw new Error(errorMessage)
       }
       
       const result = await response.json()
-      console.log("Success response:", result)
       
-      toast({ 
-        title: "Attendance Registered", 
-        description: "Your attendance has been successfully recorded", 
-        variant: "default" 
-      })
-      router.push(`/events/${params.eventId}/confirmation`)
+      if (result.status === "success" || result.status === "already_registered") {
+        toast({ 
+          title: "Attendance Registered", 
+          description: result.message, 
+          variant: "default" 
+        })
+        
+        // Redirect to confirmation page with success details
+        router.push(`/events/${eventId}/confirmation?` + new URLSearchParams({
+          status: result.status,
+          name: result.data.name,
+          regNo: result.data.reg_no,
+          message: result.message
+        }))
+      } else {
+        // Handle unexpected status
+        router.push(`/events/${eventId}/confirmation?` + new URLSearchParams({
+          status: 'error',
+          message: result.message || "Unexpected error occurred",
+          eventId: eventId
+        }))
+      }
     } catch (error: any) {
       console.error("Submission error:", error)
       toast({ 
@@ -298,11 +300,9 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
         description: error?.message || "There was a problem registering your attendance. Please try again.", 
         variant: "destructive" 
       })
-    } finally {
       setSubmitting(false)
     }
   }
-  
   return (
     <div className="container max-w-md py-8 px-4">
       <Button variant="ghost" asChild className="mb-4 -ml-4">
