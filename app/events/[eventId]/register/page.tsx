@@ -281,7 +281,8 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
     })
   }
 
-  const submitAttendance = async () => {
+  // Update the submitAttendance function to handle the new response format
+const submitAttendance = async () => {
     if (!photoTaken || !location || !selfieData || !regNumber) {
       toast({ 
         title: "Missing Information", 
@@ -306,84 +307,93 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
         return
       }
       
-      // Get event ID and sanitize it
       const eventId = params.eventId.trim()
-      console.log("Event ID:", eventId)
-      
-      console.log("Selfie blob size:", selfieBlob.size, "bytes")
-      console.log("Submitting attendance for event:", eventId)
-      console.log("Location:", location)
       
       const formData = new FormData()
-      // Use the exact field name expected by the server
-      formData.append("event_id", params.eventId)  
+      formData.append("event_id", eventId)  
       formData.append("user_lat", String(location.lat))
       formData.append("user_lng", String(location.lng))
       formData.append("selfie", selfieBlob, "selfie.jpg")
-      // Add registration number to form data
       formData.append("reg_no", regNumber)
       
-      // Log form data entries for debugging
-      console.log("Form data entries:")
-      for (const [key, value] of formData.entries()) {
-        console.log(`- ${key}:`, 
-          value instanceof Blob ? `Blob (${value.size} bytes)` : value)
-      }
-      
-      // Use the API_BASE_URL with fallback
       const endpoint = `${API_BASE_URL}/register_attendance`
-      console.log("Submitting to endpoint:", endpoint)
       
       const response = await fetch(endpoint, {
         method: "POST",
         body: formData,
       })
       
-      console.log("Response status:", response.status)
-      
       if (!response.ok) {
         const errorText = await response.text()
         let errorMessage = "Unknown error"
         
         try {
-          // Try to parse as JSON to get detailed error
           const errorData = JSON.parse(errorText)
           errorMessage = errorData.detail || "Server error"
         } catch (e) {
-          // If not JSON, use text as is
           errorMessage = errorText || "Server error"
         }
         
+        // Handle specific error cases
         if (response.status === 404) {
           errorMessage = "Event not found. Please check the event ID and try again."
-        } else if (response.status === 400 && errorMessage.includes("away from the event location")) {
-          errorMessage = `${errorMessage} Please move closer to the event venue.`
+        } else if (response.status === 400) {
+          if (errorMessage.includes("away from the event location")) {
+            errorMessage = `${errorMessage} Please move closer to the event venue.`
+          } else if (errorMessage.includes("No face detected")) {
+            errorMessage = "No face detected in the selfie. Please retake with clear lighting."
+          } else if (errorMessage.includes("Face verification failed")) {
+            errorMessage = "Face verification failed. Please ensure you're using your own registration number."
+          }
         }
         
-        console.error("Error response:", errorMessage)
         throw new Error(errorMessage)
       }
       
       const result = await response.json()
-      console.log("Success response:", result)
       
-      // Check for processing status
-      if (result.status === "processing") {
-        toast({ 
-          title: "Processing Attendance", 
-          description: result.message || "Your attendance is being processed. You'll be redirected to the status page.", 
-          variant: "default" 
-        })
-      } else {
-        toast({ 
-          title: "Attendance Registered", 
-          description: "Your attendance has been successfully recorded", 
-          variant: "default" 
-        })
+      // Handle different response statuses
+      switch (result.status) {
+        case "processing":
+          toast({ 
+            title: "Processing Attendance", 
+            description: "Your attendance is being processed. Please wait...", 
+            variant: "default" 
+          })
+          
+          // Start polling for status if there's a check_url
+          if (result.data?.check_url) {
+            router.push(`/events/${eventId}/confirmation?reg_no=${regNumber}`)
+          }
+          break;
+          
+        case "success":
+          toast({ 
+            title: "Attendance Registered", 
+            description: result.message || "Your attendance has been successfully recorded", 
+            variant: "default" 
+          })
+          router.push(`/events/${eventId}/confirmation`)
+          break;
+          
+        case "already_registered":
+          toast({ 
+            title: "Already Registered", 
+            description: result.message || "You have already registered attendance for this event", 
+            variant: "default" 
+          })
+          router.push(`/events/${eventId}/confirmation`)
+          break;
+          
+        default:
+          toast({ 
+            title: "Status Unknown", 
+            description: "Please check your attendance status on the next page", 
+            variant: "default" 
+          })
+          router.push(`/events/${eventId}/confirmation`)
       }
       
-      // Redirect to the confirmation page where status will be checked
-      router.push(`/events/${params.eventId}/confirmation`)
     } catch (error: any) {
       console.error("Submission error:", error)
       toast({ 
@@ -394,8 +404,7 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
     } finally {
       setSubmitting(false)
     }
-  }
-  
+}
   // Show loading or error state for event
   if (eventLoading) {
     return (
