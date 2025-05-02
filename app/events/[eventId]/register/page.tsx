@@ -9,7 +9,7 @@ import Link from "next/link"
 import { Progress } from "@/components/ui/progress"
 
 // Use fallback if environment variable is not set
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
 
 export default function RegisterAttendance({ params }: { params: { eventId: string } }) {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -38,7 +38,7 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
       setEventLoading(true)
       try {
         // This endpoint isn't shown in your backend code, but it's likely to exist
-        const response = await fetch(`${API_BASE_URL}/events/${params.eventId}`)
+        const response = await fetch(`${API_BASE_URL}/event/${params.eventId}`)
         
         if (!response.ok) {
           if (response.status === 404) {
