@@ -3,7 +3,7 @@ import { useState, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Camera, MapPin, Loader2, Check, ArrowLeft } from "lucide-react"
+import { Camera, MapPin, Loader2, Check, ArrowLeft, AlertCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import { Progress } from "@/components/ui/progress"
@@ -22,10 +22,52 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
   const [locationError, setLocationError] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [step, setStep] = useState(1)
-  const [progress, setProgress] = useState(50)
+  const [progress, setProgress] = useState(33)
   const [selfieData, setSelfieData] = useState<string | null>(null) // Store base64 data
+  const [regNumber, setRegNumber] = useState<string>("")
+  const [regNumberError, setRegNumberError] = useState("")
+  const [eventInfo, setEventInfo] = useState<any>(null)
+  const [eventLoading, setEventLoading] = useState(true)
+  const [eventError, setEventError] = useState("")
   const router = useRouter()
   const { toast } = useToast()
+
+  // Fetch event details on mount
+  useEffect(() => {
+    const fetchEventDetails = async () => {
+      setEventLoading(true)
+      try {
+        // This endpoint isn't shown in your backend code, but it's likely to exist
+        const response = await fetch(`${API_BASE_URL}/events/${params.eventId}`)
+        
+        if (!response.ok) {
+          if (response.status === 404) {
+            setEventError("Event not found. Please check the event ID.")
+          } else {
+            setEventError("Failed to fetch event details")
+          }
+          setEventLoading(false)
+          return
+        }
+        
+        const data = await response.json()
+        setEventInfo(data)
+        
+        // Load registration number from localStorage if available
+        const savedRegNo = localStorage.getItem('user_reg_no')
+        if (savedRegNo) {
+          setRegNumber(savedRegNo)
+        }
+      } catch (error) {
+        console.error("Error fetching event:", error)
+        setEventError("Failed to fetch event details. Please try again later.")
+      } finally {
+        setEventLoading(false)
+      }
+    }
+    
+    fetchEventDetails()
+  }, [params.eventId])
 
   // Start camera and save stream in state
   const startCamera = async () => {
@@ -75,10 +117,10 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
     }
   }, [cameraActive, stream])
 
-  // Start camera on first step, stop after transition away
+  // Start camera on step 2, stop after transition away
   useEffect(() => {
-    if (step === 1 && !cameraActive && !stream) startCamera()
-    if (step !== 1 && cameraActive) stopCamera()
+    if (step === 2 && !cameraActive && !stream) startCamera()
+    if (step !== 2 && cameraActive) stopCamera()
     // eslint-disable-next-line
   }, [step, cameraActive, stream])
 
@@ -130,7 +172,7 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
     }, 250)
   }
 
-  // Location as before
+  // Location functionality
   const getLocation = () => {
     setLocationLoading(true)
     setLocationError("")
@@ -154,27 +196,63 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
     )
   }
 
-  // Multi-step logic
+  // Validate registration number
+  const validateRegNumber = () => {
+    if (!regNumber || regNumber.trim() === "") {
+      setRegNumberError("Please enter your registration number")
+      return false
+    }
+    
+    // Additional validation rules can be added here based on your requirements
+    // For example, format checking, length, etc.
+    
+    setRegNumberError("")
+    return true
+  }
+
+  // Multi-step logic with added reg number step
   const nextStep = () => {
-    if (step === 1 && !photoTaken) {
-      toast({ title: "Photo Required", description: "Please take a selfie to continue", variant: "destructive" })
+    if (step === 1) {
+      if (!validateRegNumber()) return
+      
+      // Save reg number to localStorage for persistence
+      localStorage.setItem('user_reg_no', regNumber)
+      setStep(2)
+      setProgress(66)
       return
     }
-    if (step === 1 && cameraActive) stopCamera()
-    if (step < 2) {
-      setStep(step + 1)
+    
+    if (step === 2 && !photoTaken) {
+      toast({ 
+        title: "Photo Required", 
+        description: "Please take a selfie to continue", 
+        variant: "destructive" 
+      })
+      return
+    }
+    
+    if (step === 2 && cameraActive) stopCamera()
+    
+    if (step === 2) {
+      setStep(3)
       setProgress(100)
     }
   }
   
   const prevStep = () => {
     if (step > 1) {
-      setStep(step - 1)
-      setProgress(50)
-      // Back to selfie? if so, show camera again!
-      setPhotoTaken(false)
-      setSelfieData(null)
-      setTimeout(() => startCamera(), 250)
+      if (step === 3) {
+        setStep(2)
+        setProgress(66)
+        // Back to selfie? if so, show camera again!
+        setPhotoTaken(false)
+        setSelfieData(null)
+        setTimeout(() => startCamera(), 250)
+      } else if (step === 2) {
+        stopCamera()
+        setStep(1)
+        setProgress(33)
+      }
     }
   }
 
@@ -204,7 +282,7 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
   }
 
   const submitAttendance = async () => {
-    if (!photoTaken || !location || !selfieData) {
+    if (!photoTaken || !location || !selfieData || !regNumber) {
       toast({ 
         title: "Missing Information", 
         description: "Please complete all steps before submitting", 
@@ -215,6 +293,7 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
     
     setSubmitting(true)
     try {
+      console.log("Converting selfie to blob...")
       const selfieBlob = await base64ToBlob(selfieData)
       
       if (!selfieBlob) {
@@ -227,72 +306,84 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
         return
       }
       
+      // Get event ID and sanitize it
       const eventId = params.eventId.trim()
+      console.log("Event ID:", eventId)
+      
+      console.log("Selfie blob size:", selfieBlob.size, "bytes")
+      console.log("Submitting attendance for event:", eventId)
+      console.log("Location:", location)
       
       const formData = new FormData()
-      formData.append("event_id", eventId)
+      // Use the exact field name expected by the server
+      formData.append("event_id", params.eventId)  
       formData.append("user_lat", String(location.lat))
       formData.append("user_lng", String(location.lng))
       formData.append("selfie", selfieBlob, "selfie.jpg")
+      // Add registration number to form data
+      formData.append("reg_no", regNumber)
       
+      // Log form data entries for debugging
+      console.log("Form data entries:")
+      for (const [key, value] of formData.entries()) {
+        console.log(`- ${key}:`, 
+          value instanceof Blob ? `Blob (${value.size} bytes)` : value)
+      }
+      
+      // Use the API_BASE_URL with fallback
       const endpoint = `${API_BASE_URL}/register_attendance`
+      console.log("Submitting to endpoint:", endpoint)
       
       const response = await fetch(endpoint, {
         method: "POST",
         body: formData,
       })
       
+      console.log("Response status:", response.status)
+      
       if (!response.ok) {
         const errorText = await response.text()
         let errorMessage = "Unknown error"
         
         try {
+          // Try to parse as JSON to get detailed error
           const errorData = JSON.parse(errorText)
           errorMessage = errorData.detail || "Server error"
         } catch (e) {
+          // If not JSON, use text as is
           errorMessage = errorText || "Server error"
         }
         
-        // Handle specific error cases
         if (response.status === 404) {
           errorMessage = "Event not found. Please check the event ID and try again."
-        } else if (response.status === 401) {
-          // Redirect to confirmation page with error
-          router.push(`/events/${eventId}/confirmation?` + new URLSearchParams({
-            status: 'error',
-            message: errorMessage,
-            eventId: eventId // Pass eventId for "Try Again" functionality
-          }))
-          return
+        } else if (response.status === 400 && errorMessage.includes("away from the event location")) {
+          errorMessage = `${errorMessage} Please move closer to the event venue.`
         }
         
+        console.error("Error response:", errorMessage)
         throw new Error(errorMessage)
       }
       
       const result = await response.json()
+      console.log("Success response:", result)
       
-      if (result.status === "success" || result.status === "already_registered") {
+      // Check for processing status
+      if (result.status === "processing") {
         toast({ 
-          title: "Attendance Registered", 
-          description: result.message, 
+          title: "Processing Attendance", 
+          description: result.message || "Your attendance is being processed. You'll be redirected to the status page.", 
           variant: "default" 
         })
-        
-        // Redirect to confirmation page with success details
-        router.push(`/events/${eventId}/confirmation?` + new URLSearchParams({
-          status: result.status,
-          name: result.data.name,
-          regNo: result.data.reg_no,
-          message: result.message
-        }))
       } else {
-        // Handle unexpected status
-        router.push(`/events/${eventId}/confirmation?` + new URLSearchParams({
-          status: 'error',
-          message: result.message || "Unexpected error occurred",
-          eventId: eventId
-        }))
+        toast({ 
+          title: "Attendance Registered", 
+          description: "Your attendance has been successfully recorded", 
+          variant: "default" 
+        })
       }
+      
+      // Redirect to the confirmation page where status will be checked
+      router.push(`/events/${params.eventId}/confirmation`)
     } catch (error: any) {
       console.error("Submission error:", error)
       toast({ 
@@ -300,9 +391,49 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
         description: error?.message || "There was a problem registering your attendance. Please try again.", 
         variant: "destructive" 
       })
+    } finally {
       setSubmitting(false)
     }
   }
+  
+  // Show loading or error state for event
+  if (eventLoading) {
+    return (
+      <div className="container max-w-md py-12 px-4 flex flex-col items-center justify-center">
+        <Card className="w-full">
+          <CardContent className="py-10 text-center">
+            <Loader2 className="h-10 w-10 animate-spin mx-auto mb-4 text-primary" />
+            <p>Loading event details...</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+  
+  if (eventError) {
+    return (
+      <div className="container max-w-md py-12 px-4">
+        <Card className="w-full">
+          <CardHeader>
+            <CardTitle className="text-center">Event Error</CardTitle>
+          </CardHeader>
+          <CardContent className="py-6 text-center">
+            <AlertCircle className="h-10 w-10 text-destructive mx-auto mb-4" />
+            <p className="text-destructive">{eventError}</p>
+          </CardContent>
+          <CardFooter className="flex justify-center">
+            <Button asChild variant="outline">
+              <Link href="/events">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Events
+              </Link>
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    )
+  }
+  
   return (
     <div className="container max-w-md py-8 px-4">
       <Button variant="ghost" asChild className="mb-4 -ml-4">
@@ -314,28 +445,64 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Register Attendance</h1>
         <p className="text-muted-foreground mt-1">Complete all steps to mark your attendance</p>
+        {eventInfo && eventInfo.title && (
+          <p className="text-base font-medium text-primary mt-1">
+            {eventInfo.title}
+          </p>
+        )}
         <p className="text-xs text-muted-foreground mt-1">Event ID: {params.eventId}</p>
       </div>
       <div className="mb-8">
         <Progress value={progress} className="h-2" />
         <div className="flex justify-between mt-2 text-sm text-muted-foreground">
-          <span className={step >= 1 ? "font-medium text-primary" : ""}>Take Selfie</span>
-          <span className={step >= 2 ? "font-medium text-primary" : ""}>Confirm Location</span>
+          <span className={step >= 1 ? "font-medium text-primary" : ""}>Registration</span>
+          <span className={step >= 2 ? "font-medium text-primary" : ""}>Selfie</span>
+          <span className={step >= 3 ? "font-medium text-primary" : ""}>Location</span>
         </div>
       </div>
       <Card>
         <CardHeader>
           <CardTitle>
-            {step === 1 && "Take a Selfie"}
-            {step === 2 && "Confirm Location"}
+            {step === 1 && "Registration Number"}
+            {step === 2 && "Take a Selfie"}
+            {step === 3 && "Confirm Location"}
           </CardTitle>
           <CardDescription>
-            {step === 1 && "Take a selfie for facial recognition"}
-            {step === 2 && "Confirm your current location"}
+            {step === 1 && "Enter your registration number to identify yourself"}
+            {step === 2 && "Take a selfie for facial recognition"}
+            {step === 3 && "Confirm your current location"}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {step === 1 && (
+            <div className="space-y-4">
+              <div className="grid w-full items-center gap-1.5">
+                <label htmlFor="regNumber" className="text-sm font-medium">
+                  Registration Number
+                </label>
+                <input
+                  type="text"
+                  id="regNumber"
+                  value={regNumber}
+                  onChange={(e) => {
+                    setRegNumber(e.target.value)
+                    setRegNumberError("")
+                  }}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  placeholder="Enter your registration number"
+                />
+                {regNumberError && (
+                  <p className="text-sm text-destructive">{regNumberError}</p>
+                )}
+              </div>
+              <div className="rounded-lg bg-muted/50 p-4 text-sm text-center">
+                <p>Your registration number will be used to identify you.</p>
+                <p className="mt-1 text-muted-foreground">This will be combined with facial recognition.</p>
+              </div>
+            </div>
+          )}
+          
+          {step === 2 && (
             <div className="space-y-4">
               <div className="border rounded-md overflow-hidden bg-muted">
                 {/* Both elements exist always so no race */}
@@ -377,11 +544,12 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
               </div>
               <div className="rounded-lg bg-muted/50 p-4 text-sm text-center">
                 <p>Your face will be used to identify you in our system.</p>
-                <p className="mt-1 text-muted-foreground">No need to enter personal details.</p>
+                <p className="mt-1 text-muted-foreground">Ensure your face is clearly visible.</p>
               </div>
             </div>
           )}
-          {step === 2 && (
+          
+          {step === 3 && (
             <div className="space-y-4">
               {!location ? (
                 <div className="flex flex-col items-center gap-4 py-6">
@@ -423,8 +591,8 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
           ) : (
             <div></div>
           )}
-          {step < 2 ? (
-            <Button onClick={nextStep} disabled={!photoTaken}>
+          {step < 3 ? (
+            <Button onClick={nextStep}>
               Next
             </Button>
           ) : (
