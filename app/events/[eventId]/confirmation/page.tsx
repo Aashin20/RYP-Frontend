@@ -1,32 +1,38 @@
 "use client"
 import { useState, useEffect } from "react"
+import { useSearchParams } from 'next/navigation' // Add this import
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCircle, Home, CalendarCheck, Loader2, AlertCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
-// Use fallback if environment variable is not set
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL 
+
+interface AttendanceData {
+  reg_no: string;
+  name: string;
+  timestamp: string;
+  event_title?: string;
+  event_date?: string;
+  event_location?: string;
+}
 
 export default function ConfirmationPage({ params }: { params: { eventId: string } }) {
+  const searchParams = useSearchParams()
   const [status, setStatus] = useState<'loading' | 'registered' | 'pending' | 'error'>('loading')
-  const [userData, setUserData] = useState<{
-    reg_no?: string;
-    name?: string;
-    timestamp?: string;
-  } | null>(null)
+  const [attendanceData, setAttendanceData] = useState<AttendanceData | null>(null)
   const [message, setMessage] = useState("")
   const [pollingCount, setPollingCount] = useState(0)
   const { toast } = useToast()
 
   useEffect(() => {
-    // Get registration number from localStorage (set during login/registration)
-    const reg_no = localStorage.getItem('user_reg_no')
+    // Get registration number from URL params first, then localStorage
+    const reg_no = searchParams.get('reg_no') || localStorage.getItem('user_reg_no')
     
     if (!reg_no) {
       setStatus('error')
-      setMessage("User registration number not found. Please log in again.")
+      setMessage("User registration number not found. Please try registering again.")
       return
     }
 
@@ -35,75 +41,81 @@ export default function ConfirmationPage({ params }: { params: { eventId: string
         const response = await fetch(`${API_BASE_URL}/attendance_status/${params.eventId}/${reg_no}`)
         
         if (!response.ok) {
-          if (response.status === 404) {
-            setStatus('error')
-            setMessage("Event not found. Please check the event ID.")
-            return
-          }
-          throw new Error("Failed to fetch attendance status")
+          throw new Error(response.status === 404 
+            ? "Event or attendance record not found" 
+            : "Failed to fetch attendance status"
+          )
         }
         
         const data = await response.json()
         
-        if (data.status === "registered") {
-          setStatus('registered')
-          setUserData({
-            reg_no: data.data.reg_no,
-            name: data.data.name,
-            timestamp: data.data.timestamp
-          })
-          setMessage(data.message)
-        } else if (data.status === "pending") {
-          setStatus('pending')
-          setMessage(data.message)
-          
-          // If we're still pending after multiple polls, inform the user
-          if (pollingCount > 5) {
-            setMessage("Your attendance is still being processed. This may take a few moments.")
-            toast({
-              title: "Processing",
-              description: "Attendance verification is taking longer than expected. Please wait.",
-              variant: "default"
+        switch (data.status) {
+          case "registered":
+            setStatus('registered')
+            setAttendanceData({
+              reg_no: data.data.reg_no,
+              name: data.data.name,
+              timestamp: data.data.timestamp,
+              event_title: data.data.event_title,
+              event_date: data.data.event_date,
+              event_location: data.data.event_location
             })
-          }
-          
-          // Continue polling if status is pending
-          setPollingCount(prev => prev + 1)
+            setMessage(data.message || "Your attendance has been successfully registered!")
+            break
+
+          case "pending":
+            setStatus('pending')
+            setMessage(data.message || "Your attendance is being processed...")
+            
+            if (pollingCount > 5) {
+              toast({
+                title: "Still Processing",
+                description: "Attendance verification is taking longer than expected. Please wait.",
+                variant: "default"
+              })
+            }
+            setPollingCount(prev => prev + 1)
+            break
+
+          default:
+            throw new Error("Invalid status received")
         }
       } catch (error) {
         console.error("Error checking attendance status:", error)
         setStatus('error')
-        setMessage("Failed to check attendance status. Please try again later.")
+        setMessage(error instanceof Error ? error.message : "Failed to check attendance status")
       }
     }
 
     checkAttendanceStatus()
     
-    // Set up polling if status is still loading or pending
-    // Poll every 3 seconds up to a maximum of 30 seconds (10 attempts)
+    // Polling logic
     const intervalId = setInterval(() => {
-      if (status === 'loading' || status === 'pending') {
-        if (pollingCount < 10) {
-          checkAttendanceStatus()
-        } else {
-          clearInterval(intervalId)
-          if (status === 'pending') {
-            setMessage("Your attendance is still being processed. Please check your events page later.")
-          }
-        }
+      if ((status === 'loading' || status === 'pending') && pollingCount < 10) {
+        checkAttendanceStatus()
       } else {
         clearInterval(intervalId)
+        if (status === 'pending') {
+          setMessage("Verification is taking longer than expected. Please check your events page later.")
+        }
       }
     }, 3000)
 
     return () => clearInterval(intervalId)
-  }, [params.eventId, status, pollingCount, toast])
+  }, [params.eventId, status, pollingCount, searchParams, toast])
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString('en-US', {
+      dateStyle: 'full',
+      timeStyle: 'short'
+    })
+  }
 
   return (
     <div className="container max-w-md py-12 px-4">
-      <Card className="text-center border-none shadow-lg">
+      <Card className="text-center">
         <CardHeader>
-          <div className="flex justify-center mb-4">
+          <div className="flex justify-center mb-6">
             {status === 'loading' && (
               <div className="rounded-full bg-blue-100 p-6">
                 <Loader2 className="h-12 w-12 text-blue-600 animate-spin" />
@@ -125,53 +137,70 @@ export default function ConfirmationPage({ params }: { params: { eventId: string
               </div>
             )}
           </div>
-          <CardTitle className="text-2xl">
-            {status === 'loading' && "Checking Attendance..."}
-            {status === 'registered' && "Attendance Registered!"}
+          <CardTitle className="text-2xl mb-2">
+            {status === 'loading' && "Verifying Attendance..."}
+            {status === 'registered' && "Attendance Confirmed!"}
             {status === 'pending' && "Processing Attendance"}
-            {status === 'error' && "Attendance Check Failed"}
+            {status === 'error' && "Verification Failed"}
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-base">
             {message}
           </CardDescription>
         </CardHeader>
-        <CardContent className="pb-6">
-          {status === 'registered' && userData && (
-            <div className="rounded-lg bg-muted p-4 mb-6">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="text-left text-muted-foreground">Name:</div>
-                <div className="text-right font-medium">{userData.name}</div>
-                
-                <div className="text-left text-muted-foreground">Registration No:</div>
-                <div className="text-right font-medium">{userData.reg_no}</div>
-                
-                <div className="text-left text-muted-foreground">Time:</div>
-                <div className="text-right font-medium">
-                  {userData.timestamp ? new Date(userData.timestamp).toLocaleString() : 'N/A'}
+        
+        <CardContent>
+          {status === 'registered' && attendanceData && (
+            <div className="space-y-6">
+              <div className="rounded-lg bg-muted p-6">
+                <h3 className="font-semibold mb-4">Attendance Details</h3>
+                <div className="space-y-3 text-sm">
+                  {attendanceData.event_title && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Event:</span>
+                      <span className="font-medium">{attendanceData.event_title}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Name:</span>
+                    <span className="font-medium">{attendanceData.name}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Registration No:</span>
+                    <span className="font-medium">{attendanceData.reg_no}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Marked At:</span>
+                    <span className="font-medium">{formatDate(attendanceData.timestamp)}</span>
+                  </div>
+                  {attendanceData.event_location && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Location:</span>
+                      <span className="font-medium">{attendanceData.event_location}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           )}
           
           {status === 'pending' && (
-            <div className="rounded-lg bg-muted p-4 mb-6">
+            <div className="rounded-lg bg-muted p-6">
               <p className="text-muted-foreground">
-                Your facial recognition and location data are being verified. 
-                This may take a few moments to complete.
+                Please wait while we verify your attendance details. This usually takes a few moments.
               </p>
             </div>
           )}
           
           {status === 'error' && (
-            <div className="rounded-lg bg-red-50 p-4 mb-6">
-              <p className="text-red-600">
-                There was a problem verifying your attendance. 
-                Please try registering again or contact support.
+            <div className="rounded-lg bg-destructive/10 p-6">
+              <p className="text-destructive">
+                Unable to verify attendance. Please try registering again or contact support if the issue persists.
               </p>
             </div>
           )}
         </CardContent>
-        <CardFooter className="flex justify-center space-x-4 pt-0">
+
+        <CardFooter className="flex justify-center space-x-4">
           <Button asChild variant="outline">
             <Link href="/">
               <Home className="h-4 w-4 mr-2" />
@@ -181,7 +210,7 @@ export default function ConfirmationPage({ params }: { params: { eventId: string
           <Button asChild>
             <Link href="/events">
               <CalendarCheck className="h-4 w-4 mr-2" />
-              More Events
+              Events
             </Link>
           </Button>
         </CardFooter>
