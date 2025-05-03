@@ -294,111 +294,50 @@ const submitAttendance = async () => {
     
     setSubmitting(true)
     try {
-      console.log("Converting selfie to blob...")
+      // Convert base64 to blob
       const selfieBlob = await base64ToBlob(selfieData)
       
       if (!selfieBlob) {
-        toast({ 
-          title: "Photo Error", 
-          description: "Could not process your selfie. Please retake.", 
-          variant: "destructive" 
-        })
-        setSubmitting(false)
-        return
+        throw new Error("Could not process selfie image")
       }
-      
-      const eventId = params.eventId.trim()
-      
+
+      // Create FormData with exact field names matching the backend
       const formData = new FormData()
-      formData.append("event_id", eventId)  
-      formData.append("user_lat", String(location.lat))
-      formData.append("user_lng", String(location.lng))
-      formData.append("selfie", selfieBlob, "selfie.jpg")
+      formData.append("event_id", params.eventId)
       formData.append("reg_no", regNumber)
-      
-      const endpoint = `${API_BASE_URL}/register_attendance`
-      
-      const response = await fetch(endpoint, {
+      formData.append("user_lat", location.lat.toString()) // Convert to string
+      formData.append("user_lng", location.lng.toString()) // Convert to string
+      formData.append("selfie", selfieBlob, "selfie.jpg")
+
+      const response = await fetch(`${API_BASE_URL}/register_attendance`, {
         method: "POST",
         body: formData,
+        // Don't set Content-Type header - browser will set it with boundary for FormData
       })
-      
+
       if (!response.ok) {
-        const errorText = await response.text()
-        let errorMessage = "Unknown error"
-        
-        try {
-          const errorData = JSON.parse(errorText)
-          errorMessage = errorData.detail || "Server error"
-        } catch (e) {
-          errorMessage = errorText || "Server error"
-        }
-        
-        // Handle specific error cases
-        if (response.status === 404) {
-          errorMessage = "Event not found. Please check the event ID and try again."
-        } else if (response.status === 400) {
-          if (errorMessage.includes("away from the event location")) {
-            errorMessage = `${errorMessage} Please move closer to the event venue.`
-          } else if (errorMessage.includes("No face detected")) {
-            errorMessage = "No face detected in the selfie. Please retake with clear lighting."
-          } else if (errorMessage.includes("Face verification failed")) {
-            errorMessage = "Face verification failed. Please ensure you're using your own registration number."
-          }
-        }
-        
+        const errorData = await response.json().catch(() => null)
+        const errorMessage = errorData?.detail || "Failed to register attendance"
         throw new Error(errorMessage)
       }
-      
+
       const result = await response.json()
-      
-      // Handle different response statuses
-      switch (result.status) {
-        case "processing":
-          toast({ 
-            title: "Processing Attendance", 
-            description: "Your attendance is being processed. Please wait...", 
-            variant: "default" 
-          })
-          
-          // Start polling for status if there's a check_url
-          if (result.data?.check_url) {
-            router.push(`/events/${eventId}/confirmation?reg_no=${regNumber}`)
-          }
-          break;
-          
-        case "success":
-          toast({ 
-            title: "Attendance Registered", 
-            description: result.message || "Your attendance has been successfully recorded", 
-            variant: "default" 
-          })
-          router.push(`/events/${eventId}/confirmation`)
-          break;
-          
-        case "already_registered":
-          toast({ 
-            title: "Already Registered", 
-            description: result.message || "You have already registered attendance for this event", 
-            variant: "default" 
-          })
-          router.push(`/events/${eventId}/confirmation`)
-          break;
-          
-        default:
-          toast({ 
-            title: "Status Unknown", 
-            description: "Please check your attendance status on the next page", 
-            variant: "default" 
-          })
-          router.push(`/events/${eventId}/confirmation`)
-      }
-      
-    } catch (error: any) {
+
+      // Handle success
+      toast({ 
+        title: "Success", 
+        description: result.message || "Attendance registered successfully", 
+        variant: "default" 
+      })
+
+      // Redirect to confirmation page
+      router.push(`/events/${params.eventId}/confirmation?reg_no=${regNumber}`)
+
+    } catch (error) {
       console.error("Submission error:", error)
       toast({ 
-        title: "Submission Error", 
-        description: error?.message || "There was a problem registering your attendance. Please try again.", 
+        title: "Error", 
+        description: error.message || "Failed to register attendance", 
         variant: "destructive" 
       })
     } finally {
