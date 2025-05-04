@@ -295,23 +295,19 @@ const submitAttendance = async () => {
   
   setSubmitting(true)
   try {
-    // Convert base64 to blob
     const selfieBlob = await base64ToBlob(selfieData)
     
     if (!selfieBlob) {
       throw new Error("Could not process selfie image")
     }
 
-    // Create FormData with exact field names matching the backend
     const formData = new FormData()
     formData.append("event_id", params.eventId)
     formData.append("reg_no", regNumber)
-    formData.append("user_lat", location.lat.toString()) 
+    formData.append("user_lat", location.lat.toString())
     formData.append("user_lng", location.lng.toString())
     formData.append("selfie", selfieBlob, "selfie.jpg")
 
-    console.log("Submitting attendance data to:", `${API_BASE_URL}/register_attendance`)
-    
     const response = await fetch(`${API_BASE_URL}/register_attendance`, {
       method: "POST",
       body: formData,
@@ -319,24 +315,36 @@ const submitAttendance = async () => {
 
     const result = await response.json()
 
-    if (!response.ok) {
-      // Extract error message from response if available
-      const errorMessage = result?.detail || "Failed to register attendance"
-      throw new Error(errorMessage)
+    if (response.ok) {
+      // Store successful registration data
+      localStorage.setItem('registrationData', JSON.stringify({
+        success: true,
+        event_title: eventInfo?.title,
+        event_date: eventInfo?.date,
+        event_location: eventInfo?.location,
+        selfie_url: selfieData, // Store the base64 image data
+        // Add any other relevant data from eventInfo or result
+      }))
+
+      toast({ 
+        title: "Success", 
+        description: result.message || "Attendance registered successfully", 
+        variant: "default" 
+      })
+
+      // Add a small delay before redirect
+      setTimeout(() => {
+        router.replace(`/events/${params.eventId}/confirmation?reg_no=${encodeURIComponent(regNumber)}`)
+      }, 1500)
+    } else {
+      // Store error information
+      localStorage.setItem('registrationData', JSON.stringify({
+        success: false,
+        message: result.detail || "Failed to register attendance"
+      }))
+      
+      throw new Error(result.detail || "Failed to register attendance")
     }
-
-    // Handle success
-    toast({ 
-      title: "Success", 
-      description: result.message || "Attendance registered successfully", 
-      variant: "default" 
-    })
-
-    // Add a small delay before redirect to ensure toast is visible
-    setTimeout(() => {
-      // Use replace instead of push to prevent going back to the form
-      router.replace(`/events/${params.eventId}/confirmation?reg_no=${encodeURIComponent(regNumber)}`)
-    }, 1500)
 
   } catch (error) {
     console.error("Submission error:", error)
