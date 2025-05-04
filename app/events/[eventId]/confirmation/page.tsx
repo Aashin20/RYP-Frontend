@@ -1,108 +1,63 @@
+// confirmation.tsx
 "use client"
 import { useState, useEffect } from "react"
-import { useSearchParams } from 'next/navigation' // Add this import
+import { useSearchParams } from 'next/navigation'
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCircle, Home, CalendarCheck, Loader2, AlertCircle } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL 
 
 interface AttendanceData {
   reg_no: string;
-  name: string;
+  name?: string;
   timestamp: string;
   event_title?: string;
   event_date?: string;
   event_location?: string;
+  selfie_url?: string;
 }
 
 export default function ConfirmationPage({ params }: { params: { eventId: string } }) {
   const searchParams = useSearchParams()
-  const [status, setStatus] = useState<'loading' | 'registered' | 'pending' | 'error'>('loading')
+  const [status, setStatus] = useState<'registered' | 'error'>('error')
   const [attendanceData, setAttendanceData] = useState<AttendanceData | null>(null)
   const [message, setMessage] = useState("")
-  const [pollingCount, setPollingCount] = useState(0)
-  const { toast } = useToast()
 
   useEffect(() => {
-    // Get registration number from URL params first, then localStorage
+    // Get registration data from localStorage
+    const registrationData = localStorage.getItem('registrationData')
     const reg_no = searchParams.get('reg_no') || localStorage.getItem('user_reg_no')
-    
-    if (!reg_no) {
-      setStatus('error')
-      setMessage("User registration number not found. Please try registering again.")
-      return
-    }
 
-    const checkAttendanceStatus = async () => {
+    if (registrationData && reg_no) {
       try {
-        const response = await fetch(`${API_BASE_URL}/attendance_status/${params.eventId}/${reg_no}`)
+        const parsedData = JSON.parse(registrationData)
         
-        if (!response.ok) {
-          throw new Error(response.status === 404 
-            ? "Event or attendance record not found" 
-            : "Failed to fetch attendance status"
-          )
-        }
-        
-        const data = await response.json()
-        
-        switch (data.status) {
-          case "registered":
-            setStatus('registered')
-            setAttendanceData({
-              reg_no: data.data.reg_no,
-              name: data.data.name,
-              timestamp: data.data.timestamp,
-              event_title: data.data.event_title,
-              event_date: data.data.event_date,
-              event_location: data.data.event_location
-            })
-            setMessage(data.message || "Your attendance has been successfully registered!")
-            break
-
-          case "pending":
-            setStatus('pending')
-            setMessage(data.message || "Your attendance is being processed...")
-            
-            if (pollingCount > 5) {
-              toast({
-                title: "Still Processing",
-                description: "Attendance verification is taking longer than expected. Please wait.",
-                variant: "default"
-              })
-            }
-            setPollingCount(prev => prev + 1)
-            break
-
-          default:
-            throw new Error("Invalid status received")
+        if (parsedData.success) {
+          setStatus('registered')
+          setAttendanceData({
+            reg_no: reg_no,
+            timestamp: new Date().toISOString(),
+            ...parsedData
+          })
+          setMessage("Your attendance has been successfully registered!")
+        } else {
+          setStatus('error')
+          setMessage(parsedData.message || "Registration failed. Please try again.")
         }
       } catch (error) {
-        console.error("Error checking attendance status:", error)
         setStatus('error')
-        setMessage(error instanceof Error ? error.message : "Failed to check attendance status")
+        setMessage("Unable to verify registration. Please try again.")
       }
+    } else {
+      setStatus('error')
+      setMessage("No registration data found. Please complete the registration process.")
     }
 
-    checkAttendanceStatus()
-    
-    // Polling logic
-    const intervalId = setInterval(() => {
-      if ((status === 'loading' || status === 'pending') && pollingCount < 10) {
-        checkAttendanceStatus()
-      } else {
-        clearInterval(intervalId)
-        if (status === 'pending') {
-          setMessage("Verification is taking longer than expected. Please check your events page later.")
-        }
-      }
-    }, 3000)
-
-    return () => clearInterval(intervalId)
-  }, [params.eventId, status, pollingCount, searchParams, toast])
+    // Clean up registration data from localStorage after reading
+    return () => {
+      localStorage.removeItem('registrationData')
+    }
+  }, [searchParams])
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString('en-US', {
@@ -116,32 +71,18 @@ export default function ConfirmationPage({ params }: { params: { eventId: string
       <Card className="text-center">
         <CardHeader>
           <div className="flex justify-center mb-6">
-            {status === 'loading' && (
-              <div className="rounded-full bg-blue-100 p-6">
-                <Loader2 className="h-12 w-12 text-blue-600 animate-spin" />
-              </div>
-            )}
-            {status === 'registered' && (
+            {status === 'registered' ? (
               <div className="rounded-full bg-green-100 p-6">
                 <CheckCircle className="h-12 w-12 text-green-600" />
               </div>
-            )}
-            {status === 'pending' && (
-              <div className="rounded-full bg-yellow-100 p-6">
-                <Loader2 className="h-12 w-12 text-yellow-600 animate-spin" />
-              </div>
-            )}
-            {status === 'error' && (
+            ) : (
               <div className="rounded-full bg-red-100 p-6">
                 <AlertCircle className="h-12 w-12 text-red-600" />
               </div>
             )}
           </div>
           <CardTitle className="text-2xl mb-2">
-            {status === 'loading' && "Verifying Attendance..."}
-            {status === 'registered' && "Attendance Confirmed!"}
-            {status === 'pending' && "Processing Attendance"}
-            {status === 'error' && "Verification Failed"}
+            {status === 'registered' ? "Attendance Confirmed!" : "Verification Failed"}
           </CardTitle>
           <CardDescription className="text-base">
             {message}
@@ -161,10 +102,6 @@ export default function ConfirmationPage({ params }: { params: { eventId: string
                     </div>
                   )}
                   <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Name:</span>
-                    <span className="font-medium">{attendanceData.name}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
                     <span className="text-muted-foreground">Registration No:</span>
                     <span className="font-medium">{attendanceData.reg_no}</span>
                   </div>
@@ -180,14 +117,16 @@ export default function ConfirmationPage({ params }: { params: { eventId: string
                   )}
                 </div>
               </div>
-            </div>
-          )}
-          
-          {status === 'pending' && (
-            <div className="rounded-lg bg-muted p-6">
-              <p className="text-muted-foreground">
-                Please wait while we verify your attendance details. This usually takes a few moments.
-              </p>
+              
+              {attendanceData.selfie_url && (
+                <div className="rounded-lg overflow-hidden">
+                  <img 
+                    src={attendanceData.selfie_url} 
+                    alt="Attendance Selfie" 
+                    className="w-full h-auto"
+                  />
+                </div>
+              )}
             </div>
           )}
           
