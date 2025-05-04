@@ -282,67 +282,72 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
   }
 
   // Update the submitAttendance function to handle the new response format
+// Refactored submitAttendance function
 const submitAttendance = async () => {
-    if (!photoTaken || !location || !selfieData || !regNumber) {
-      toast({ 
-        title: "Missing Information", 
-        description: "Please complete all steps before submitting", 
-        variant: "destructive" 
-      })
-      return
-    }
+  if (!photoTaken || !location || !selfieData || !regNumber) {
+    toast({ 
+      title: "Missing Information", 
+      description: "Please complete all steps before submitting", 
+      variant: "destructive" 
+    })
+    return
+  }
+  
+  setSubmitting(true)
+  try {
+    // Convert base64 to blob
+    const selfieBlob = await base64ToBlob(selfieData)
     
-    setSubmitting(true)
-    try {
-      // Convert base64 to blob
-      const selfieBlob = await base64ToBlob(selfieData)
-      
-      if (!selfieBlob) {
-        throw new Error("Could not process selfie image")
-      }
-
-      // Create FormData with exact field names matching the backend
-      const formData = new FormData()
-      formData.append("event_id", params.eventId)
-      formData.append("reg_no", regNumber)
-      formData.append("user_lat", location.lat.toString()) // Convert to string
-      formData.append("user_lng", location.lng.toString()) // Convert to string
-      formData.append("selfie", selfieBlob, "selfie.jpg")
-
-      const response = await fetch(`${API_BASE_URL}/register_attendance`, {
-        method: "POST",
-        body: formData,
-        // Don't set Content-Type header - browser will set it with boundary for FormData
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null)
-        const errorMessage = errorData?.detail || "Failed to register attendance"
-        throw new Error(errorMessage)
-      }
-
-      const result = await response.json()
-
-      // Handle success
-      toast({ 
-        title: "Success", 
-        description: result.message || "Attendance registered successfully", 
-        variant: "default" 
-      })
-
-      // Redirect to confirmation page
-      router.push(`/events/${params.eventId}/confirmation?reg_no=${regNumber}`)
-
-    } catch (error) {
-      console.error("Submission error:", error)
-      toast({ 
-        title: "Error", 
-        description: error.message || "Failed to register attendance", 
-        variant: "destructive" 
-      })
-    } finally {
-      setSubmitting(false)
+    if (!selfieBlob) {
+      throw new Error("Could not process selfie image")
     }
+
+    // Create FormData with exact field names matching the backend
+    const formData = new FormData()
+    formData.append("event_id", params.eventId)
+    formData.append("reg_no", regNumber)
+    formData.append("user_lat", location.lat.toString()) 
+    formData.append("user_lng", location.lng.toString())
+    formData.append("selfie", selfieBlob, "selfie.jpg")
+
+    console.log("Submitting attendance data to:", `${API_BASE_URL}/register_attendance`)
+    
+    const response = await fetch(`${API_BASE_URL}/register_attendance`, {
+      method: "POST",
+      body: formData,
+    })
+
+    const result = await response.json()
+
+    if (!response.ok) {
+      // Extract error message from response if available
+      const errorMessage = result?.detail || "Failed to register attendance"
+      throw new Error(errorMessage)
+    }
+
+    // Handle success
+    toast({ 
+      title: "Success", 
+      description: result.message || "Attendance registered successfully", 
+      variant: "default" 
+    })
+
+    // Add a small delay before redirect to ensure toast is visible
+    setTimeout(() => {
+      // Use replace instead of push to prevent going back to the form
+      router.replace(`/events/${params.eventId}/confirmation?reg_no=${encodeURIComponent(regNumber)}`)
+    }, 1500)
+
+  } catch (error) {
+    console.error("Submission error:", error)
+    toast({ 
+      title: "Registration Failed", 
+      description: error.message || "Failed to register attendance. Please try again.", 
+      variant: "destructive" 
+    })
+  } finally {
+    setSubmitting(false)
+  }
 }
   // Show loading or error state for event
   if (eventLoading) {
