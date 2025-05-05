@@ -53,8 +53,10 @@ export default function EventsPage() {
     async function fetchEvents() {
       setLoading(true)
       try {
+        console.log("Hellow")
         const res = await fetch(`${API_BASE_URL}/available_events`)
         const data = await res.json()
+        console.log(data)
         const apiEvents: ApiEvent[] = data.events
 
         // For each event, fetch address for coordinates if present.
