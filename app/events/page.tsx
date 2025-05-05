@@ -86,6 +86,7 @@ export default function EventsPage() {
         }))
         setEvents(displayEvents)
       } catch (err) {
+        console.log("Error catch")
         setEvents([])
       }
       setLoading(false)
