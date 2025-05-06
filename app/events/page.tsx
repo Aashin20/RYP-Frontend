@@ -88,6 +88,7 @@ export default function EventsPage() {
       } catch (err) {
         console.log(err)
         console.log("Error catch")
+        console.log(`${API_BASE_URL}/available_events`)
         setEvents([])
       }
       setLoading(false)
