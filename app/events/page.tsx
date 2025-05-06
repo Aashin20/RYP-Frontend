@@ -55,7 +55,7 @@ export default function EventsPage() {
       try {
         console.log("Hellow")
         const res = await fetch(`${API_BASE_URL}/available_events`)
-        const data = await res.json()
+        const data = await res
         console.log(data)
         const apiEvents: ApiEvent[] = data.events
 
