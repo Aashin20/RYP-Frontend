@@ -38,7 +38,14 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
       setEventLoading(true)
       try {
         // This endpoint isn't shown in your backend code, but it's likely to exist
-        const response = await fetch(`${API_BASE_URL}/event/${params.eventId}`)
+        const response = await fetch(`${API_BASE_URL}/event/${params.eventId}`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({})  // include a payload here if your backend expects one
+})
+
         
         if (!response.ok) {
           if (response.status === 404) {
