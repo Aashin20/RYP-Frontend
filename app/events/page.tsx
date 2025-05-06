@@ -55,8 +55,14 @@ export default function EventsPage() {
       try {
         console.log("Hellow")
         const res = await fetch(`${API_BASE_URL}/available_events`)
-        const data = await res
-        console.log(data)
+        const text = await res.text()
+try {
+  const data = JSON.parse(text)
+  const apiEvents: ApiEvent[] = data.events
+  // ... rest of logic
+} catch (err) {
+  console.error("Failed to parse JSON. Got this instead:", text)
+}
         const apiEvents: ApiEvent[] = data.events
 
         // For each event, fetch address for coordinates if present.
