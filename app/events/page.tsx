@@ -65,7 +65,7 @@ export default function EventsPage() {
 try {
   const data = JSON.parse(text)
   const apiEvents: ApiEvent[] = data.events
-  // ... rest of logic
+  console.log(text)
 } catch (err) {
   console.error("Failed to parse JSON. Got this instead:", text)
 }
