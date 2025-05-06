@@ -64,12 +64,11 @@ export default function EventsPage() {
         const text = await res.text()
 try {
   const data = JSON.parse(text)
-  const apiEvents: ApiEvent[] = data.events
+  var apiEvents: ApiEvent[] = data.events
   console.log(text)
 } catch (err) {
   console.error("Failed to parse JSON. Got this instead:", text)
 }
-        const apiEvents: ApiEvent[] = data.events
 
         // For each event, fetch address for coordinates if present.
         const displayEvents = await Promise.all(apiEvents.map(async (apiEvent, idx) => {
