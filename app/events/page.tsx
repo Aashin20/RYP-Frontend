@@ -54,7 +54,13 @@ export default function EventsPage() {
       setLoading(true)
       try {
         console.log("Hellow")
-        const res = await fetch(`${API_BASE_URL}/available_events`)
+        const res = await fetch(`${API_BASE_URL}/available_events`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({}) // send an empty object or any required payload
+})
         const text = await res.text()
 try {
   const data = JSON.parse(text)
