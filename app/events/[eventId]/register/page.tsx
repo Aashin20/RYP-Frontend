@@ -21,6 +21,7 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
   const [locationLoading, setLocationLoading] = useState(false)
   const [locationError, setLocationError] = useState("")
   const [submitting, setSubmitting] = useState(false)
+  const [registrationError, setRegistrationError] = useState<string | null>(null)
   const [step, setStep] = useState(1)
   const [progress, setProgress] = useState(33)
   const [selfieData, setSelfieData] = useState<string | null>(null) // Store base64 data
@@ -291,6 +292,8 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
   // Update the submitAttendance function to handle the new response format
 // Refactored submitAttendance function
 const submitAttendance = async () => {
+  setRegistrationError(null) // Reset error state
+  
   if (!photoTaken || !location || !selfieData || !regNumber) {
     toast({ 
       title: "Missing Information", 
@@ -301,7 +304,7 @@ const submitAttendance = async () => {
   }
   
   setSubmitting(true)
-  try {
+  try {    
     const selfieBlob = await base64ToBlob(selfieData)
     
     if (!selfieBlob) {
@@ -344,6 +347,12 @@ const submitAttendance = async () => {
         router.replace(`/events/${params.eventId}/confirmation?reg_no=${encodeURIComponent(regNumber)}`)
       }, 1500)
     } else {
+      if (!response.ok) {
+      const errorMessage = result.detail || "Failed to register attendance"
+      setRegistrationError(errorMessage)
+      return
+    }
+
       // Handle specific error cases
       let errorMessage = "Failed to register attendance"
       
@@ -385,24 +394,14 @@ const submitAttendance = async () => {
       }
     }
 
-  } catch (error) {
+  }} catch (error) {
     console.error("Submission error:", error)
-    
-    // Store error information
-    localStorage.setItem('registrationData', JSON.stringify({
-      success: false,
-      message: "Network error or server unavailable"
-    }))
-
-    toast({ 
-      title: "Connection Error", 
-      description: "Could not connect to the server. Please check your internet connection.",
-      variant: "destructive" 
-    })
+    setRegistrationError("Network error or server unavailable")
   } finally {
     setSubmitting(false)
   }
 }
+
   // Show loading or error state for event
   if (eventLoading) {
     return (
@@ -440,7 +439,21 @@ const submitAttendance = async () => {
       </div>
     )
   }
-  
+  if (registrationError) {
+  return (
+    <div className="container max-w-md py-12 px-4">
+      <RegistrationError 
+        message={registrationError}
+        eventId={params.eventId}
+        onRetry={() => {
+          setRegistrationError(null)
+          setStep(1)
+          setProgress(33)
+        }}
+      />
+    </div>
+  )
+}
   return (
     <div className="container max-w-md py-8 px-4">
       <Button variant="ghost" asChild className="mb-4 -ml-4">
