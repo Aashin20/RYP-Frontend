@@ -1,11 +1,11 @@
 // confirmation.tsx
 "use client"
 import { useState, useEffect } from "react"
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { CheckCircle, Home, CalendarCheck, Loader2, AlertCircle } from "lucide-react"
+import { CheckCircle, Home, CalendarCheck, Loader2, AlertCircle, RefreshCcw, ArrowLeft } from "lucide-react"
 
 interface AttendanceData {
   reg_no: string;
@@ -15,20 +15,37 @@ interface AttendanceData {
   event_date?: string;
   event_location?: string;
   selfie_url?: string;
+  error_code?: number;
+  error_type?: string;
 }
 
 export default function ConfirmationPage({ params }: { params: { eventId: string } }) {
   const searchParams = useSearchParams()
-  const [status, setStatus] = useState<'registered' | 'error'>('error')
+  const router = useRouter()
+  const [status, setStatus] = useState<'loading' | 'registered' | 'error'>('loading')
   const [attendanceData, setAttendanceData] = useState<AttendanceData | null>(null)
   const [message, setMessage] = useState("")
+  const [errorDetails, setErrorDetails] = useState<{
+    title: string;
+    description: string;
+    action?: string;
+  } | null>(null)
 
   useEffect(() => {
-    // Get registration data from localStorage
-    const registrationData = localStorage.getItem('registrationData')
-    const reg_no = searchParams.get('reg_no') || localStorage.getItem('user_reg_no')
+    const processRegistrationData = () => {
+      const registrationData = localStorage.getItem('registrationData')
+      const reg_no = searchParams.get('reg_no') || localStorage.getItem('user_reg_no')
 
-    if (registrationData && reg_no) {
+      if (!registrationData || !reg_no) {
+        setStatus('error')
+        setErrorDetails({
+          title: "No Registration Data",
+          description: "No registration data found. Please complete the registration process.",
+          action: "Register Again"
+        })
+        return
+      }
+
       try {
         const parsedData = JSON.parse(registrationData)
         
@@ -39,19 +56,55 @@ export default function ConfirmationPage({ params }: { params: { eventId: string
             timestamp: new Date().toISOString(),
             ...parsedData
           })
-          setMessage("Your attendance has been successfully registered!")
+          setMessage(parsedData.message || "Your attendance has been successfully registered!")
         } else {
           setStatus('error')
+          // Handle different error types
+          const errorType = parsedData.error_type || 'UNKNOWN_ERROR'
+          let errorInfo = {
+            title: "Registration Failed",
+            description: parsedData.message || "Unable to verify attendance.",
+            action: "Try Again"
+          }
+
+          switch (errorType) {
+            case 'FACE_VERIFICATION_FAILED':
+              errorInfo = {
+                title: "Face Verification Failed",
+                description: "We couldn't verify your face with our records. Please ensure good lighting and try again.",
+                action: "Retake Photo"
+              }
+              break
+            case 'LOCATION_ERROR':
+              errorInfo = {
+                title: "Location Error",
+                description: "You're too far from the event location. Please ensure you're at the venue.",
+                action: "Check Location"
+              }
+              break
+            case 'NETWORK_ERROR':
+              errorInfo = {
+                title: "Connection Error",
+                description: "Please check your internet connection and try again.",
+                action: "Retry"
+              }
+              break
+            // Add more error types as needed
+          }
+          setErrorDetails(errorInfo)
           setMessage(parsedData.message || "Registration failed. Please try again.")
         }
       } catch (error) {
         setStatus('error')
-        setMessage("Unable to verify registration. Please try again.")
+        setErrorDetails({
+          title: "Processing Error",
+          description: "Unable to process registration data. Please try again.",
+          action: "Start Over"
+        })
       }
-    } else {
-      setStatus('error')
-      setMessage("No registration data found. Please complete the registration process.")
     }
+
+    processRegistrationData()
 
     // Clean up registration data from localStorage after reading
     return () => {
@@ -59,11 +112,28 @@ export default function ConfirmationPage({ params }: { params: { eventId: string
     }
   }, [searchParams])
 
+  const handleRetry = () => {
+    router.push(`/register/${params.eventId}`)
+  }
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString('en-US', {
       dateStyle: 'full',
       timeStyle: 'short'
     })
+  }
+
+  if (status === 'loading') {
+    return (
+      <div className="container max-w-md py-12 px-4">
+        <Card className="text-center">
+          <CardContent className="py-12">
+            <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4" />
+            <p>Processing registration...</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -82,10 +152,10 @@ export default function ConfirmationPage({ params }: { params: { eventId: string
             )}
           </div>
           <CardTitle className="text-2xl mb-2">
-            {status === 'registered' ? "Attendance Confirmed!" : "Verification Failed"}
+            {status === 'registered' ? "Attendance Confirmed!" : errorDetails?.title}
           </CardTitle>
           <CardDescription className="text-base">
-            {message}
+            {status === 'registered' ? message : errorDetails?.description}
           </CardDescription>
         </CardHeader>
         
@@ -95,6 +165,7 @@ export default function ConfirmationPage({ params }: { params: { eventId: string
               <div className="rounded-lg bg-muted p-6">
                 <h3 className="font-semibold mb-4">Attendance Details</h3>
                 <div className="space-y-3 text-sm">
+                  {/* Existing attendance details... */}
                   {attendanceData.event_title && (
                     <div className="flex justify-between items-center">
                       <span className="text-muted-foreground">Event:</span>
@@ -131,10 +202,25 @@ export default function ConfirmationPage({ params }: { params: { eventId: string
           )}
           
           {status === 'error' && (
-            <div className="rounded-lg bg-destructive/10 p-6">
-              <p className="text-destructive">
-                Unable to verify attendance. Please try registering again or contact support if the issue persists.
-              </p>
+            <div className="space-y-4">
+              <div className="rounded-lg bg-destructive/10 p-6">
+                <p className="text-destructive mb-4">
+                  {errorDetails?.description}
+                </p>
+                <Button 
+                  onClick={handleRetry}
+                  className="w-full"
+                  variant="destructive"
+                >
+                  <RefreshCcw className="h-4 w-4 mr-2" />
+                  {errorDetails?.action || "Try Again"}
+                </Button>
+              </div>
+              
+              <div className="text-sm text-muted-foreground">
+                <p>If the problem persists, please contact support.</p>
+                <p className="mt-1">Reference ID: {params.eventId}</p>
+              </div>
             </div>
           )}
         </CardContent>
