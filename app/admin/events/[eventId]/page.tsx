@@ -46,71 +46,84 @@ export default function EventDetails({ params }: PageProps) {
   const router = useRouter()
   const { toast } = useToast()
 
-  // Handle mounting state
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+// Handle mounting state
+useEffect(() => {
+  setMounted(true)
+}, [])
 
-  // Handle authentication and data fetching
-  useEffect(() => {
-    if (!mounted) return;
+// Handle authentication and data fetching
+useEffect(() => {
+  if (!mounted) return;
 
-    const isAuthenticated = localStorage.getItem("adminAuthenticated") === "true"
-    if (!isAuthenticated) {
-      router.push("/admin/login")
-      return
-    }
+  const isAuthenticated = localStorage.getItem("adminAuthenticated") === "true"
+  if (!isAuthenticated) {
+    router.push("/admin/login")
+    return
+  }
 
-    const fetchEventDetails = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/event/${params.eventId}`)
-        if (!response.ok) throw new Error('Event not found')
-        const data = await response.json()
-        setEvent(data)
-      } catch (error) {
-        console.error('Failed to fetch event details:', error)
-        toast({
-          title: "Error",
-          description: "Failed to load event details",
-          variant: "destructive",
-        })
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchEventDetails()
-  }, [mounted, params.eventId, router, toast])
-
-  // Handle download
-  const handleDownloadAttendance = async () => {
-    if (!mounted || !params.eventId) return;
-
+  const fetchEventDetails = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/event/${params.eventId}/attendance/download`)
-      if (!response.ok) throw new Error('Download failed')
-      
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `attendance-${params.eventId}.csv`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      
-      toast({
-        title: "Download Started",
-        description: "Attendance data is being downloaded",
+      const response = await fetch(`${API_BASE_URL}/event/${params.eventId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ eventId: params.eventId }) // You can customize this payload if needed
       })
+      if (!response.ok) throw new Error('Event not found')
+      const data = await response.json()
+      setEvent(data)
     } catch (error) {
+      console.error('Failed to fetch event details:', error)
       toast({
-        title: "Download Failed",
-        description: "Failed to download attendance data",
+        title: "Error",
+        description: "Failed to load event details",
         variant: "destructive",
       })
+    } finally {
+      setLoading(false)
     }
   }
+
+  fetchEventDetails()
+}, [mounted, params.eventId, router, toast])
+
+// Handle download
+const handleDownloadAttendance = async () => {
+  if (!mounted || !params.eventId) return;
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/event/${params.eventId}/attendance/download`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ eventId: params.eventId }) // Adjust if the backend expects a different structure
+    })
+    if (!response.ok) throw new Error('Download failed')
+    
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `attendance-${params.eventId}.csv`
+    document.body.appendChild(a)
+    a.click()
+    window.URL.revokeObjectURL(url)
+    
+    toast({
+      title: "Download Started",
+      description: "Attendance data is being downloaded",
+    })
+  } catch (error) {
+    toast({
+      title: "Download Failed",
+      description: "Failed to download attendance data",
+      variant: "destructive",
+    })
+  }
+}
+
 
   // Don't render anything until mounted
   if (!mounted) return null;
