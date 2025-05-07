@@ -35,19 +35,39 @@ export default function AdminDashboard() {
     }
 
     Promise.all([
-      fetch(`${API_BASE_URL}/active_events`).then((res) => res.json()),
-      fetch(`${API_BASE_URL}/past_events`).then((res) => res.json()),
-    ])
-      .then(([activeData, pastData]) => {
-        const formattedActiveEvents = (activeData.events || []).map((event: Event) => ({
-          ...event,
-          _id: event._id?.toString() || event._id
-        }))
+  fetch(`${API_BASE_URL}/active_events`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({}) // Add payload here if needed
+  }).then((res) => res.json()),
 
-        const formattedPastEvents = (pastData.events || []).map((event: Event) => ({
-          ...event,
-          _id: event._id?.toString() || event._id
-        }))
+  fetch(`${API_BASE_URL}/past_events`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({}) // Add payload here if needed
+  }).then((res) => res.json()),
+])
+  .then(([activeData, pastData]) => {
+    const formattedActiveEvents = (activeData.events || []).map((event: Event) => ({
+      ...event,
+      _id: event._id?.toString() || event._id
+    }));
+
+    const formattedPastEvents = (pastData.events || []).map((event: Event) => ({
+      ...event,
+      _id: event._id?.toString() || event._id
+    }));
+
+    // You can now use formattedActiveEvents and formattedPastEvents
+  })
+  .catch((error) => {
+    console.error("Error fetching events:", error);
+  });
+
 
         setActiveEvents(formattedActiveEvents)
         setPastEvents(formattedPastEvents)
