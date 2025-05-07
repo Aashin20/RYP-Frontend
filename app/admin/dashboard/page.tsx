@@ -27,58 +27,52 @@ export default function AdminDashboard() {
   const router = useRouter()
   const { toast } = useToast()
 
-  useEffect(() => {
-    const isAuthenticated = localStorage.getItem("adminAuthenticated") === "true"
-    if (!isAuthenticated) {
-      router.push("/admin/login")
-      return
-    }
+useEffect(() => {
+  const isAuthenticated = localStorage.getItem("adminAuthenticated") === "true"
+  if (!isAuthenticated) {
+    router.push("/admin/login")
+    return
+  }
 
-    Promise.all([
-  fetch(`${API_BASE_URL}/active_events`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({}) // Add payload here if needed
-  }).then((res) => res.json()),
+  Promise.all([
+    fetch(`${API_BASE_URL}/active_events`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({})
+    }).then((res) => res.json()),
 
-  fetch(`${API_BASE_URL}/past_events`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({}) // Add payload here if needed
-  }).then((res) => res.json()),
-])
-  .then(([activeData, pastData]) => {
-    const formattedActiveEvents = (activeData.events || []).map((event: Event) => ({
-      ...event,
-      _id: event._id?.toString() || event._id
-    }));
+    fetch(`${API_BASE_URL}/past_events`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({})
+    }).then((res) => res.json()),
+  ])
+    .then(([activeData, pastData]) => {
+      const formattedActiveEvents = (activeData.events || []).map((event: Event) => ({
+        ...event,
+        _id: event._id?.toString() || event._id
+      }));
 
-    const formattedPastEvents = (pastData.events || []).map((event: Event) => ({
-      ...event,
-      _id: event._id?.toString() || event._id
-    }));
+      const formattedPastEvents = (pastData.events || []).map((event: Event) => ({
+        ...event,
+        _id: event._id?.toString() || event._id
+      }));
 
-    // You can now use formattedActiveEvents and formattedPastEvents
-  })
-  .catch((error) => {
-    console.error("Error fetching events:", error);
-  });
+      setActiveEvents(formattedActiveEvents)
+      setPastEvents(formattedPastEvents)
+      setFaceCount(5)
+      setLoading(false)
+    })
+    .catch((error) => {
+      console.error("Error fetching events:", error);
+      setLoading(false)
+    });
+}, [router])
 
-
-        setActiveEvents(formattedActiveEvents)
-        setPastEvents(formattedPastEvents)
-        setFaceCount(5)
-        setLoading(false)
-      })
-      .catch((error) => {
-        console.error(error)
-        setLoading(false)
-      })
-  }, [router])
 
   const handleLogout = () => {
     localStorage.removeItem("adminAuthenticated")
