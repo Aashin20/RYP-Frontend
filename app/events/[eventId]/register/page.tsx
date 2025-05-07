@@ -322,6 +322,7 @@ const submitAttendance = async () => {
 
     const result = await response.json()
 
+    // Handle different HTTP status codes
     if (response.ok) {
       // Store successful registration data
       localStorage.setItem('registrationData', JSON.stringify({
@@ -329,8 +330,8 @@ const submitAttendance = async () => {
         event_title: eventInfo?.title,
         event_date: eventInfo?.date,
         event_location: eventInfo?.location,
-        selfie_url: selfieData, // Store the base64 image data
-        // Add any other relevant data from eventInfo or result
+        selfie_url: selfieData,
+        message: result.message
       }))
 
       toast({ 
@@ -339,25 +340,63 @@ const submitAttendance = async () => {
         variant: "default" 
       })
 
-      // Add a small delay before redirect
       setTimeout(() => {
         router.replace(`/events/${params.eventId}/confirmation?reg_no=${encodeURIComponent(regNumber)}`)
       }, 1500)
     } else {
+      // Handle specific error cases
+      let errorMessage = "Failed to register attendance"
+      
+      switch (response.status) {
+        case 400:
+          errorMessage = result.detail || "Invalid request. Please check your inputs."
+          break
+        case 403:
+          errorMessage = result.detail || "Face verification failed. Please try again."
+          break
+        case 404:
+          errorMessage = result.detail || "Registration not found. Please contact admin."
+          break
+        case 500:
+          errorMessage = "Server error. Please try again later."
+          break
+      }
+
       // Store error information
       localStorage.setItem('registrationData', JSON.stringify({
         success: false,
-        message: result.detail || "Failed to register attendance"
+        message: errorMessage
       }))
       
-      throw new Error(result.detail || "Failed to register attendance")
+      toast({ 
+        title: "Registration Failed", 
+        description: errorMessage,
+        variant: "destructive" 
+      })
+
+      // For certain errors, you might want to reset the form or go back to a specific step
+      if (response.status === 403) {
+        // Reset selfie and go back to selfie step
+        setStep(2)
+        setProgress(66)
+        setPhotoTaken(false)
+        setSelfieData(null)
+        setTimeout(() => startCamera(), 250)
+      }
     }
 
   } catch (error) {
     console.error("Submission error:", error)
+    
+    // Store error information
+    localStorage.setItem('registrationData', JSON.stringify({
+      success: false,
+      message: "Network error or server unavailable"
+    }))
+
     toast({ 
-      title: "Registration Failed", 
-      description: error.message || "Failed to register attendance. Please try again.", 
+      title: "Connection Error", 
+      description: "Could not connect to the server. Please check your internet connection.",
       variant: "destructive" 
     })
   } finally {
