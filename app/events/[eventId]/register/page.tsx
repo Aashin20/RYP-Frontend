@@ -478,12 +478,12 @@ const submitAttendance = async () => {
       <Card>
         <CardHeader>
           <CardTitle>
-            {step === 1 && "Registration Number"}
+            {step === 1 && "Faculty Id"}
             {step === 2 && "Take a Selfie"}
             {step === 3 && "Confirm Location"}
           </CardTitle>
           <CardDescription>
-            {step === 1 && "Enter your registration number to identify yourself"}
+            {step === 1 && "Enter your faculty id to identify yourself"}
             {step === 2 && "Take a selfie for facial recognition"}
             {step === 3 && "Confirm your current location"}
           </CardDescription>
@@ -504,15 +504,15 @@ const submitAttendance = async () => {
                     setRegNumberError("")
                   }}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  placeholder="Enter your registration number"
+                  placeholder="Enter your Faculty ID"
                 />
                 {regNumberError && (
                   <p className="text-sm text-destructive">{regNumberError}</p>
                 )}
               </div>
               <div className="rounded-lg bg-muted/50 p-4 text-sm text-center">
-                <p>Your registration number will be used to identify you.</p>
-                <p className="mt-1 text-muted-foreground">This will be combined with facial recognition.</p>
+                <p>Make sure to double check you Faculty ID!!</p>
+                
               </div>
             </div>
           )}
@@ -569,7 +569,7 @@ const submitAttendance = async () => {
               {!location ? (
                 <div className="flex flex-col items-center gap-4 py-6">
                   <MapPin className="h-12 w-12 text-muted-foreground" />
-                  <p className="text-center text-muted-foreground">We need your location to verify your attendance</p>
+                  <p className="text-center text-muted-foreground">We need your location to verify if you are in the venue</p>
                   <Button onClick={getLocation} disabled={locationLoading} className="w-full">
                     {locationLoading ? (
                       <>
