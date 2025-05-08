@@ -173,7 +173,7 @@ export default function ConfirmationPage({ params }: { params: { eventId: string
                     </div>
                   )}
                   <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Registration No:</span>
+                    <span className="text-muted-foreground">Faculty ID:</span>
                     <span className="font-medium">{attendanceData.reg_no}</span>
                   </div>
                   <div className="flex justify-between items-center">
