@@ -493,7 +493,7 @@ const submitAttendance = async () => {
             <div className="space-y-4">
               <div className="grid w-full items-center gap-1.5">
                 <label htmlFor="regNumber" className="text-sm font-medium">
-                  Registration Number
+                  Faculty ID
                 </label>
                 <input
                   type="text"
