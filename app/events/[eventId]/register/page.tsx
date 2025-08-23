@@ -3,13 +3,21 @@ import { useState, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Camera, MapPin, Loader2, Check, ArrowLeft, AlertCircle } from "lucide-react"
+import { Camera, MapPin, Loader2, Check, ArrowLeft, AlertCircle, CheckCircle2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import { Progress } from "@/components/ui/progress"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
-// Use fallback if environment variable is not set
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
+import { API_BASE_URL, apiRequest } from "@/lib/api"
 
 export default function RegisterAttendance({ params }: { params: { eventId: string } }) {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -29,6 +37,7 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
   const [eventInfo, setEventInfo] = useState<any>(null)
   const [eventLoading, setEventLoading] = useState(true)
   const [eventError, setEventError] = useState("")
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
 
@@ -38,7 +47,7 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
       setEventLoading(true)
       try {
         // This endpoint isn't shown in your backend code, but it's likely to exist
-        const response = await fetch(`${API_BASE_URL}/event/${params.eventId}`)
+        const response = await apiRequest(`${API_BASE_URL}/event/${params.eventId}`)
         
         if (!response.ok) {
           if (response.status === 404) {
@@ -281,82 +290,86 @@ export default function RegisterAttendance({ params }: { params: { eventId: stri
     })
   }
 
-  // Update the submitAttendance function to handle the new response format
-// Refactored submitAttendance function
-const submitAttendance = async () => {
-  if (!photoTaken || !location || !selfieData || !regNumber) {
-    toast({ 
-      title: "Missing Information", 
-      description: "Please complete all steps before submitting", 
-      variant: "destructive" 
-    })
-    return
-  }
-  
-  setSubmitting(true)
-  try {
-    const selfieBlob = await base64ToBlob(selfieData)
-    
-    if (!selfieBlob) {
-      throw new Error("Could not process selfie image")
-    }
-
-    const formData = new FormData()
-    formData.append("event_id", params.eventId)
-    formData.append("reg_no", regNumber)
-    formData.append("user_lat", location.lat.toString())
-    formData.append("user_lng", location.lng.toString())
-    formData.append("selfie", selfieBlob, "selfie.jpg")
-
-    const response = await fetch(`${API_BASE_URL}/register_attendance`, {
-      method: "POST",
-      body: formData,
-    })
-
-    const result = await response.json()
-
-    if (response.ok) {
-      // Store successful registration data
-      localStorage.setItem('registrationData', JSON.stringify({
-        success: true,
-        event_title: eventInfo?.title,
-        event_date: eventInfo?.date,
-        event_location: eventInfo?.location,
-        selfie_url: selfieData, // Store the base64 image data
-        // Add any other relevant data from eventInfo or result
-      }))
-
+  // Updated submitAttendance function to handle new response format
+  const submitAttendance = async () => {
+    if (!photoTaken || !location || !selfieData || !regNumber) {
       toast({ 
-        title: "Success", 
-        description: result.message || "Attendance registered successfully", 
-        variant: "default" 
+        title: "Missing Information", 
+        description: "Please complete all steps before submitting", 
+        variant: "destructive" 
+      })
+      return
+    }
+    
+    setSubmitting(true)
+    try {
+      const selfieBlob = await base64ToBlob(selfieData)
+      
+      if (!selfieBlob) {
+        throw new Error("Could not process selfie image")
+      }
+
+      const formData = new FormData()
+      formData.append("event_id", params.eventId)
+      formData.append("reg_no", regNumber)
+      formData.append("user_lat", location.lat.toString())
+      formData.append("user_lng", location.lng.toString())
+      formData.append("selfie", selfieBlob, "selfie.jpg")
+
+      const response = await apiRequest(`${API_BASE_URL}/register_attendance`, {
+        method: "POST",
+        body: formData,
       })
 
-      // Add a small delay before redirect
-      setTimeout(() => {
-        router.replace(`/events/${params.eventId}/confirmation?reg_no=${encodeURIComponent(regNumber)}`)
-      }, 1500)
-    } else {
-      // Store error information
-      localStorage.setItem('registrationData', JSON.stringify({
-        success: false,
-        message: result.detail || "Failed to register attendance"
-      }))
+      const result = await response.json()
+      console.log("Attendance registration response:", result)
       
-      throw new Error(result.detail || "Failed to register attendance")
-    }
+      if (response.ok) {
+        const isAlreadyPresent = result.status === "Already present"
+        
+        if (isAlreadyPresent) {
+          alert("You have already registered for this event!")
+        } else {
+          alert("Attendance marked successfully!")
+          window.location.href = '/'
+        }
 
-  } catch (error) {
-    console.error("Submission error:", error)
-    toast({ 
-      title: "Registration Failed", 
-      description: error.message || "Failed to register attendance. Please try again.", 
-      variant: "destructive" 
-    })
-  } finally {
-    setSubmitting(false)
+        // Show appropriate toast based on the result
+        if (isAlreadyPresent) {
+          toast({ 
+            title: "Already Registered", 
+            description: result.message, 
+            variant: "default",
+            duration: 3000
+          })
+        } else {
+          // Show success alert and redirect
+          alert("Attendance marked successfully!")
+          router.push('/')
+        }
+      } else {
+        // This is a true error (likely location-related)
+        localStorage.setItem('registrationData', JSON.stringify({
+          success: false,
+          message: result.detail || "Failed to register attendance",
+          reg_no: regNumber
+        }))
+        
+        throw new Error(result.detail || "Failed to register attendance")
+      }
+
+    } catch (error: any) {
+      console.error("Submission error:", error)
+      toast({ 
+        title: "Registration Failed", 
+        description: error instanceof Error ? error.message : "Failed to register attendance. Please try again.", 
+        variant: "destructive" 
+      })
+    } finally {
+      setSubmitting(false)
+    }
   }
-}
+
   // Show loading or error state for event
   if (eventLoading) {
     return (
@@ -397,6 +410,28 @@ const submitAttendance = async () => {
   
   return (
     <div className="container max-w-md py-8 px-4">
+      <AlertDialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100 mb-4">
+              <CheckCircle2 className="h-6 w-6 text-green-600" />
+            </div>
+            <AlertDialogTitle className="text-center text-xl">Attendance Marked Successfully!</AlertDialogTitle>
+            <AlertDialogDescription className="text-center">
+              Thank you for registering your attendance. You will be redirected to the home page.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="sm:justify-center">
+            <AlertDialogAction 
+              onClick={() => router.push('/')}
+              className="bg-green-600 text-white hover:bg-green-700"
+            >
+              Continue to Home
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      
       <Button variant="ghost" asChild className="mb-4 -ml-4">
         <Link href="/events">
           <ArrowLeft className="h-4 w-4 mr-2" />

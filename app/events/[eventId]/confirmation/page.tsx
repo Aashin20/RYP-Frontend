@@ -1,11 +1,11 @@
-// confirmation.tsx
 "use client"
+
 import { useState, useEffect } from "react"
 import { useSearchParams } from 'next/navigation'
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { CheckCircle, Home, CalendarCheck, Loader2, AlertCircle } from "lucide-react"
+import { CheckCircle, Home, CalendarCheck, Loader2, AlertCircle, Info } from "lucide-react"
 
 interface AttendanceData {
   reg_no: string;
@@ -15,31 +15,41 @@ interface AttendanceData {
   event_date?: string;
   event_location?: string;
   selfie_url?: string;
+  alreadyPresent?: boolean;
+  message?: string;
+  attendee_info?: any;
 }
 
 export default function ConfirmationPage({ params }: { params: { eventId: string } }) {
   const searchParams = useSearchParams()
-  const [status, setStatus] = useState<'registered' | 'error'>('error')
+  const [status, setStatus] = useState<'registered' | 'already_present' | 'error'>('error')
   const [attendanceData, setAttendanceData] = useState<AttendanceData | null>(null)
   const [message, setMessage] = useState("")
 
   useEffect(() => {
-    // Get registration data from localStorage
     const registrationData = localStorage.getItem('registrationData')
     const reg_no = searchParams.get('reg_no') || localStorage.getItem('user_reg_no')
 
     if (registrationData && reg_no) {
       try {
         const parsedData = JSON.parse(registrationData)
+        console.log("Parsed registration data:", parsedData)
         
-        if (parsedData.success) {
-          setStatus('registered')
+        if (parsedData.success || parsedData.status === 'success') {
+          if (parsedData.alreadyPresent) {
+            setStatus('already_present')
+            setMessage("You have already registered for this event!")
+          } else {
+            setStatus('registered')
+            setMessage("Attendance Marked Successfully! Thank you for registering.")
+          }
+          
           setAttendanceData({
             reg_no: reg_no,
-            timestamp: new Date().toISOString(),
+            timestamp: parsedData.attendee_info?.timestamp || new Date().toISOString(),
+            name: parsedData.attendee_info?.name,
             ...parsedData
           })
-          setMessage("Your attendance has been successfully registered!")
         } else {
           setStatus('error')
           setMessage(parsedData.message || "Registration failed. Please try again.")
@@ -53,7 +63,6 @@ export default function ConfirmationPage({ params }: { params: { eventId: string
       setMessage("No registration data found. Please complete the registration process.")
     }
 
-    // Clean up registration data from localStorage after reading
     return () => {
       localStorage.removeItem('registrationData')
     }
@@ -66,23 +75,49 @@ export default function ConfirmationPage({ params }: { params: { eventId: string
     })
   }
 
+  const getStatusIcon = () => {
+    switch (status) {
+      case 'registered':
+        return (
+          <div className="rounded-full bg-green-100 p-6">
+            <CheckCircle className="h-12 w-12 text-green-600" />
+          </div>
+        )
+      case 'already_present':
+        return (
+          <div className="rounded-full bg-blue-100 p-6">
+            <Info className="h-12 w-12 text-blue-600" />
+          </div>
+        )
+      default:
+        return (
+          <div className="rounded-full bg-red-100 p-6">
+            <AlertCircle className="h-12 w-12 text-red-600" />
+          </div>
+        )
+    }
+  }
+
+  const getStatusTitle = () => {
+    switch (status) {
+      case 'registered':
+        return "Attendance Confirmed!"
+      case 'already_present':
+        return "Already Registered"
+      default:
+        return "Verification Failed"
+    }
+  }
+
   return (
     <div className="container max-w-md py-12 px-4">
       <Card className="text-center">
         <CardHeader>
           <div className="flex justify-center mb-6">
-            {status === 'registered' ? (
-              <div className="rounded-full bg-green-100 p-6">
-                <CheckCircle className="h-12 w-12 text-green-600" />
-              </div>
-            ) : (
-              <div className="rounded-full bg-red-100 p-6">
-                <AlertCircle className="h-12 w-12 text-red-600" />
-              </div>
-            )}
+            {getStatusIcon()}
           </div>
           <CardTitle className="text-2xl mb-2">
-            {status === 'registered' ? "Attendance Confirmed!" : "Verification Failed"}
+            {getStatusTitle()}
           </CardTitle>
           <CardDescription className="text-base">
             {message}
@@ -90,7 +125,7 @@ export default function ConfirmationPage({ params }: { params: { eventId: string
         </CardHeader>
         
         <CardContent>
-          {status === 'registered' && attendanceData && (
+          {(status === 'registered' || status === 'already_present') && attendanceData && (
             <div className="space-y-6">
               <div className="rounded-lg bg-muted p-6">
                 <h3 className="font-semibold mb-4">Attendance Details</h3>
@@ -105,6 +140,12 @@ export default function ConfirmationPage({ params }: { params: { eventId: string
                     <span className="text-muted-foreground">Registration No:</span>
                     <span className="font-medium">{attendanceData.reg_no}</span>
                   </div>
+                  {attendanceData.name && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Name:</span>
+                      <span className="font-medium">{attendanceData.name}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center">
                     <span className="text-muted-foreground">Marked At:</span>
                     <span className="font-medium">{formatDate(attendanceData.timestamp)}</span>
@@ -125,6 +166,14 @@ export default function ConfirmationPage({ params }: { params: { eventId: string
                     alt="Attendance Selfie" 
                     className="w-full h-auto"
                   />
+                </div>
+              )}
+
+              {status === 'already_present' && (
+                <div className="rounded-lg bg-blue-50 border border-blue-200 p-4 text-sm">
+                  <p className="text-blue-800">
+                    Your attendance was already recorded for this event. No further action is required.
+                  </p>
                 </div>
               )}
             </div>

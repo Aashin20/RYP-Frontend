@@ -8,8 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { CalendarIcon, Clock, MapPin, ArrowLeft } from "lucide-react"
 import { formatDate } from "@/lib/utils"
 import Link from "next/link"
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
+import { API_BASE_URL, apiRequest } from "@/lib/api"
 
 async function latLngToAddress(lat: number, lng: number): Promise<string> {
   try {
@@ -53,8 +52,9 @@ export default function EventsPage() {
     async function fetchEvents() {
       setLoading(true)
       try {
-        const res = await fetch(`${API_BASE_URL}/available_events`)
+        const res = await apiRequest(`${API_BASE_URL}/available_events`)
         const data = await res.json()
+        console.log("API response:", data)
         const apiEvents: ApiEvent[] = data.events
 
         // For each event, fetch address for coordinates if present.
