@@ -8,8 +8,9 @@ export default function Home() {
 
       {/* HEADER */}
       <div className="w-full bg-slate-900 text-white text-center py-2 text-sm font-medium">
-        Developed by <span className="text-primary font-semibold">Dr. Alice K</span> and Team
-      </div>
+  Developed by <span className="font-semibold text-white">Dr. Alice K</span> and Team
+</div>
+
 
       <div className="container px-4 py-16 md:py-24">
         <div className="mx-auto max-w-4xl text-center">
