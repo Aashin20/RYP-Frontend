@@ -5,6 +5,12 @@ import { ArrowRight, Calendar, MapPin, Camera } from "lucide-react"
 export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
+
+      {/* HEADER */}
+      <div className="w-full bg-slate-900 text-white text-center py-2 text-sm font-medium">
+        Developed by <span className="text-primary font-semibold">Dr. Alice K</span> and Team
+      </div>
+
       <div className="container px-4 py-16 md:py-24">
         <div className="mx-auto max-w-4xl text-center">
           <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
